@@ -62,7 +62,7 @@ local function social(args)
       vim.schedule(function()
         b._mark(repo.full_name, 'Title')
 
-        b._mark('☆ ' .. repo.stars .. ' | ' .. repo.url , 'Comment')
+        b._mark('☆ ' .. repo.stars .. ' | ' .. repo.url .. ' | ' .. repo.created, 'Comment')
 
         b._text(description .. '\n')
 
