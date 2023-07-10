@@ -17,8 +17,9 @@ local function get_readme_stub(owner, repo, max_lines, cb)
 end
 
 local function social(args)
-  local topic = args.fargs[1] or 'neovim'
-  local date_arg = args.fargs[2] or 'today'
+  local date_arg = args.fargs[1] or 'today'
+  -- TODO date_arg is just switch, could be 'create'
+  local topic = args.fargs[2] or 'neovim'
   local date_type = args.fargs[3] or 'created'
 
   async(function(wait, resolve)
