@@ -40,9 +40,11 @@ local function concat_vals(tbl, sep)
 end
 
 local function social(args)
-  local date_arg = args.fargs[1] or 'today'
+  local date_arg = args.fargs[1] or 'day'
   -- TODO date_arg is just switch, could be 'create'
   local topic = args.fargs[2] or 'neovim'
+
+  -- TODO completion, document
   local date_type = args.fargs[3] or 'created'
 
   async(function(wait, resolve)
@@ -52,9 +54,9 @@ local function social(args)
     }
 
     if date_type == 'created' then
-      query_params.created_after = date(date_arg)
+      query_params.created_after = date.parse(date_arg)
     else
-      query_params.updated_after = date(date_arg)
+      query_params.updated_after = date.parse(date_arg)
     end
 
     local b = display.buffer()
@@ -205,7 +207,17 @@ end
 
 local function setup()
   vim.api.nvim_create_user_command('Social', social, {
-    complete = function(cur, line, col)
+    complete = function(cur, line)
+      -- :Social w<cur>
+      local args = vim.fn.split(line, ' ', true)
+
+      if #args > 2 then return end
+
+      if cur == '' then
+        return date.names
+      end
+
+      return vim.fn.matchfuzzy(date.names, cur)
     end,
     nargs = '*'
   })

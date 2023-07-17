@@ -1,5 +1,7 @@
+local M = {}
+
 local named_dates = {
-  today = function() return os.date("%Y-%m-%d") end,
+  day = function() return os.date("%Y-%m-%d") end,
   week = function() return os.date("%Y-%m-%d", os.time() - 7 * 24 * 60 * 60) end,
   month = function() return os.date("%Y-%m-%d", os.time() - 30 * 24 * 60 * 60) end,
   quarter = function() return os.date("%Y-%m-%d", os.time() - 90 * 24 * 60 * 60) end,
@@ -7,7 +9,9 @@ local named_dates = {
   year = function() return os.date("%Y-%m-%d", os.time() - 365 * 24 * 60 * 60) end,
 }
 
-local function parse(date)
+M.names = vim.tbl_keys(named_dates)
+
+function M.parse(date)
   local is_date = date:match('%d%d%d%d%-%d%d%-%d%d') -- YYYY-MM-DD
 
   if is_date ~= nil then
@@ -19,7 +23,10 @@ local function parse(date)
     return create_date()
   end
 
-  error("Unrecognized date - use either YYYY-MM-DD or 'today', 'week', 'month'")
+  error(
+    'Unrecognized date - should be either YYYY-MM-DD or one of: '
+    .. table.concat(M.names, ', ')
+  )
 end
 
-return parse
+return M
