@@ -1,9 +1,14 @@
 local M = {}
 
+local function decode(txt)
+  return vim.json.decode(txt, { luanil = { object = true }})
+end
+
 local function gh_api(headers, url, cb)
   local args =
   {
     'curl',
+    '-sw', '%{stderr}%{response_code}', -- write http status to stderr
     '-L',
     '-H',
     'X-GitHub-Api-Version: 2022-11-28'
@@ -13,13 +18,26 @@ local function gh_api(headers, url, cb)
     table.insert(args, h)
   end
 
-  table.insert(args, url)
+  local url_
+  if url:match('^http') then
+    url_ = url
+  else
+    url_ = 'https://api.github.com/' .. url
+  end
+
+  table.insert(args, url_)
 
   return vim.system(args, {
     text = true
   }, function(done)
     if done.code ~= 0 then
       error(vim.inspect(done))
+    end
+
+    local status = done.stderr
+
+    if not status:match('^2') then
+      error(vim.inspect(done.stdout))
     end
 
     cb(done.stdout)
@@ -31,9 +49,9 @@ local function query_gh(query, cb)
       '-H',
       'Accept: application/vnd.github+json',
     },
-    'https://api.github.com/search/repositories?' .. query,
+    'search/repositories?' .. query,
     function(res)
-      cb(vim.json.decode(res))
+      cb(decode(res))
     end
   )
 end
@@ -55,6 +73,24 @@ end
 --     cb
 --   )
 -- end
+
+function M.get_user(username, cb)
+  return gh_api(
+    { '-H', 'Accept: application/vnd.github+json' },
+    'users/' .. username,
+    function(res)
+      cb(decode(res))
+    end
+  )
+end
+
+function M.get_issue_comments(owner, repo, issue, cb)
+  return gh_api(
+    { '-H', 'Accept: application/vnd.github+json' },
+    string.format('repos/%s/%s/issues/%s/comments', owner, repo, issue),
+    cb
+  )
+end
 
 local function extract_repo_item(repo_item)
   return {
