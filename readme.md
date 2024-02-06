@@ -1,6 +1,6 @@
 # social.nvim
 
-Browse github repos by topic and recency.
+Browse github repos by topic and recency
 
 ## Usage
 `:Social [date] [topic]` — Show repos with the given topic created after the date. Defaults to `:Social today neovim`.
@@ -18,5 +18,5 @@ In the Social view buffer:
 
 You can hit enter on some items:
 - `readme` — get a preview of the readme
-- `discussion` — get a link to the discussions that you can `gx` to.
+- `discussion` — get a link to the discussions that you can `gx` to
 - `owner/repo` — additional info about the creator
