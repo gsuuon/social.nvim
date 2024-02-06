@@ -1,8 +1,22 @@
-# social.nvim 📢
+# social.nvim
 
-Browse recent github repos by topic
+Browse github repos by topic and recency.
 
 ## Usage
-`:Social [date] [topic]` — Show repos with the given topic created after a date. Date can be one of: `today`, `week`, `month`, `quarter`, `half`, `year`, or a string (YYYY-MM-DD). Defaults to `:Social today neovim`.
+`:Social [date] [topic]` — Show repos with the given topic created after the date. Defaults to `:Social today neovim`.
+  - `date` can be one of:
+    - `today`
+    - `week`
+    - `month`
+    - `quarter`
+    - `half`
+    - `year`
+    - `YYYY-MM-DD`
 
-In the repo view buffer `<CR>` on `readme` to get a preview of the readme, or on `discussions` to get a link that you can `gx` to. To view a repo on github just use `gx` on it's url.
+In the Social view buffer:
+- to view a repo on github just use `gx` on it's url
+
+You can hit enter on some items:
+- `readme` — get a preview of the readme
+- `discussion` — get a link to the discussions that you can `gx` to.
+- `owner/repo` — additional info about the creator

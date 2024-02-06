@@ -44,7 +44,7 @@ local function gh_api(headers, url, cb)
   end)
 end
 
-local function query_gh(query, cb)
+local function query_gh(query, cb) -- https://docs.github.com/en/rest/search/search?apiVersion=2022-11-28#search-repositories
   return gh_api({
       '-H',
       'Accept: application/vnd.github+json',
@@ -115,7 +115,9 @@ end
 
 --- @class GhQuery
 --- @field created_after? string
+--- @field created_before? string
 --- @field updated_after? string
+--- @field updated_before? string
 --- @field topic? string
 --- @field sort? 'stars' | 'forks' | 'help-wanted-issues' | 'updated'
 
@@ -128,13 +130,15 @@ local function format_query(query)
     q = q .. 'topic:' .. query.topic .. _
   end
 
-  if query.created_after then
-    q = q .. 'created:>=' .. query.created_after .. _
-  end
+  local created_after = query.created_after or '*'
+  local created_before = query.created_before  or '*'
 
-  if query.updated_after then
-    q = q .. 'pushed:>=' .. query.updated_after .. _
-  end
+  q = q .. 'created:' .. created_after .. '..' .. created_before .. _
+
+  local updated_after = query.updated_after or '*'
+  local updated_before = query.updated_before or '*'
+
+  q = q .. 'pushed:' .. updated_after .. '..' .. updated_before .. _
 
   local params = {
     sort = query.sort,
