@@ -168,11 +168,42 @@ return {
       end),
     }
   end,
+  ---@param query GhQuery
   query_params = function(query)
     local res = {}
-    for k, v in pairs(query) do
-      table.insert(res, string.format('%s: %s', k, v))
+
+    table.insert(res, 'topic: ' .. query.topic)
+
+    if query.created_after and query.created_before then
+      table.insert(
+        res,
+        'created between '
+          .. query.created_after
+          .. ' and '
+          .. query.created_before
+      )
+    elseif query.created_after then
+      table.insert(res, 'created after ' .. query.created_after)
+    elseif query.created_before then
+      table.insert(res, 'created before ' .. query.created_before)
     end
+
+    if query.updated_after and query.updated_before then
+      table.insert(
+        res,
+        'updated between '
+          .. query.updated_after
+          .. ' and '
+          .. query.updated_before
+      )
+    elseif query.updated_after then
+      table.insert(res, 'updated after ' .. query.updated_after)
+    elseif query.updated_before then
+      table.insert(res, 'updated before ' .. query.updated_before)
+    end
+
+    table.insert(res, 'sort by ' .. query.sort)
+
     return table.concat(res, '\n')
   end,
 }

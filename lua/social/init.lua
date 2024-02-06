@@ -41,28 +41,40 @@ local function concat_vals(tbl, sep)
   return table.concat(x, sep)
 end
 
----@class ShowRecord
+---@class ShowOpts
 ---@field topic string
 ---@field after_date string
 ---@field before_date? string
----@field page_timespan string
+---@field page_timespan? string
 ---@field date_type? string
 ---@field buffer? table
 
-local function show_repos(topic, date_arg, date_type, buffer)
+---@param opts ShowOpts
+local function show_repos(opts)
+  --- ranges are inclusive on both ends so we move one of the days so our slices have different items
+  local function one_day_back(date_)
+    return date.format_date(date.span(date_, -date.timespans.day))
+  end
+
   async(function(wait, resolve)
     local query_params = {
-      topic = topic,
+      topic = opts.topic,
       sort = 'stars',
     }
 
-    if date_type == 'created' then
-      query_params.created_after = date.parse(date_arg)
+    local after_date = date.parse(opts.after_date)
+
+    if opts.date_type == 'created' then
+      query_params.created_after = after_date
+      query_params.created_before = opts.before_date
+        and one_day_back(opts.before_date)
     else
-      query_params.updated_after = date.parse(date_arg)
+      query_params.updated_after = after_date
+      query_params.updated_before = opts.before_date
+        and one_day_back(opts.before_date)
     end
 
-    local b = buffer or display.buffer()
+    local b = opts.buffer or display.buffer()
     local header = display.query_params(query_params)
 
     b.text('Checking github..\n\n' .. header)
@@ -75,14 +87,35 @@ local function show_repos(topic, date_arg, date_type, buffer)
       return
     end
 
-    b.text(string.format('%s\n%d result(s)\n\n', header, #repos)) -- clear 'checking..'
+    b.text(string.format('%s\n%d result(s)\n', header, #repos)) -- clear 'checking..'
 
-    if vim.tbl_contains(date.names, date_arg) then
-      b._mark('previous ' .. date_arg, 'PmenuSel', function(mark)
-        mark.on_cr(function()
-          b.text('') -- clear
-          show_repos(topic, date.parse(date_arg))
+    if opts.page_timespan then
+      vim.schedule(function()
+        b._mark('previous ' .. opts.page_timespan, 'PmenuSel', function(mark)
+          mark.on_cr(function()
+            b.text('') -- clear
+            show_repos(vim.tbl_deep_extend('force', opts, {
+              after_date = date.format_date(
+                date.span(after_date, -date.timespans[opts.page_timespan])
+              ),
+              before_date = after_date,
+              buffer = b,
+            }))
+          end)
         end)
+        b._mark('next ' .. opts.page_timespan, 'PmenuSel', function(mark)
+          mark.on_cr(function()
+            b.text('') -- clear
+            show_repos(vim.tbl_deep_extend('force', opts, {
+              after_date = opts.before_date,
+              before_date = date.format_date(
+                date.span(opts.before_date, date.timespans[opts.page_timespan])
+              ),
+              buffer = b,
+            }))
+          end)
+        end)
+        b._text('\n\n')
       end)
     end
 
@@ -225,7 +258,13 @@ local function social(args)
   local date_type = args.fargs[3] or 'created'
 
   vim.schedule(function()
-    show_repos(topic, date_arg, date_type)
+    show_repos({
+      topic = topic,
+      after_date = date.parse(date_arg),
+      date_type = date_type,
+      page_timespan = vim.tbl_contains(date.names, date_arg) and date_arg
+        or nil,
+    })
   end)
 end
 

@@ -51,6 +51,7 @@ local named_dates = {
 
 local names = vim.tbl_keys(named_dates)
 
+---@param date string
 local parse = function(date)
   local is_date = date:match('%d%d%d%d%-%d%d%-%d%d') -- YYYY-MM-DD
 
