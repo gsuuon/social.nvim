@@ -1,3 +1,5 @@
+-- TODO this is super dirty
+
 local function standardize_extmk_pos(mark)
   local row, col, details = mark[1], mark[2], mark[3]
 
@@ -33,6 +35,8 @@ return {
     end
 
     local function mark(original, hl)
+      local hl_ = hl
+
       vim.api.nvim_buf_set_lines(buf, -1, -1, false, { original })
 
       local row_ = vim.api.nvim_buf_line_count(buf) - 1
@@ -40,50 +44,64 @@ return {
         strict = false,
         end_row = row_,
         end_col = #original + 1,
-        hl_group = hl,
+        hl_group = hl_,
       })
+
+      local content_ = original
+
+      local highlight = vim.schedule_wrap(function(to_end)
+        local res =
+          vim.api.nvim_buf_get_extmark_by_id(buf, ns, id, { details = true })
+
+        local row, col, details = res[1], res[2], res[3]
+
+        local pos = standardize_extmk_pos({ row, col, details })
+        -- Sometimes extmark start/end get inverted, not sure how
+        -- but that means e.g. start row is after end row
+        -- if we try to highlight with the details we get back, nothing happens
+        -- extmark apis are pretty wack atm
+
+        vim.api.nvim_buf_set_extmark(buf, ns, pos.start.row, pos.start.col, {
+          id = id,
+          end_col = pos.stop.col,
+          end_row = pos.stop.row,
+          hl_group = hl_,
+          hl_eol = to_end,
+        })
+      end)
+
+      local text_ = vim.schedule_wrap(function(content)
+        content_ = content
+
+        local res =
+          vim.api.nvim_buf_get_extmark_by_id(buf, ns, id, { details = true })
+
+        local pos = standardize_extmk_pos(res)
+
+        local lines = vim.fn.split(content, '\n', true)
+
+        vim.api.nvim_buf_set_text(
+          buf,
+          pos.start.row,
+          pos.start.col,
+          pos.stop.row,
+          pos.stop.col,
+          lines
+        )
+
+        highlight()
+      end)
 
       return {
         on_cr = function(fn)
           cr_map[id] = fn
+          text_(content_)
         end,
-        text = vim.schedule_wrap(function(content)
-          local res =
-            vim.api.nvim_buf_get_extmark_by_id(buf, ns, id, { details = true })
-
-          local pos = standardize_extmk_pos(res)
-
-          local lines = vim.fn.split(content, '\n', true)
-
-          vim.api.nvim_buf_set_text(
-            buf,
-            pos.start.row,
-            pos.start.col,
-            pos.stop.row,
-            pos.stop.col,
-            lines
-          )
-        end),
-        hl = vim.schedule_wrap(function(hl_group, to_end)
-          local res =
-            vim.api.nvim_buf_get_extmark_by_id(buf, ns, id, { details = true })
-
-          local row, col, details = res[1], res[2], res[3]
-
-          local pos = standardize_extmk_pos({ row, col, details })
-          -- Sometimes extmark start/end get inverted, not sure how
-          -- but that means e.g. start row is after end row
-          -- if we try to highlight with the details we get back, nothing happens
-          -- extmark apis are pretty wack atm
-
-          vim.api.nvim_buf_set_extmark(buf, ns, pos.start.row, pos.start.col, {
-            id = id,
-            end_col = pos.stop.col,
-            end_row = pos.stop.row,
-            hl_group = hl_group,
-            hl_eol = to_end,
-          })
-        end),
+        text = text_,
+        hl = function(hl_group, to_end)
+          hl_ = hl_group
+          highlight(to_end)
+        end,
       }
     end
 
@@ -161,9 +179,9 @@ return {
       hl_md = vim.schedule_wrap(function()
         vim.api.nvim_buf_call(buf, function()
           vim.cmd([[
-          syntax include @markdown syntax/markdown.vim
-          syntax region mdRegion matchgroup=Comment start="===readme===" end="============" contains=@markdown keepend
-          ]])
+      syntax include @markdown syntax/markdown.vim
+      syntax region mdRegion matchgroup=Comment start="===readme===" end="============" contains=@markdown keepend
+      ]])
         end)
       end),
     }

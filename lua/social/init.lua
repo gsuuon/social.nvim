@@ -3,6 +3,9 @@ local display = require('social.display')
 local async = require('social.async')
 local date = require('social.date')
 
+local button_prefix = '◉ '
+local link_prefix = '⇱ '
+
 local function get_readme_stub(owner, repo, max_lines, cb)
   gh.get_readme(owner, repo, function(readme)
     local lines = {}
@@ -41,6 +44,122 @@ local function concat_vals(tbl, sep)
   return table.concat(x, sep)
 end
 
+local function show_repos(b, repos)
+  for _, repo in ipairs(repos) do
+    local description = ''
+    if repo.description then
+      description = '\n' .. repo.description
+    end
+
+    local repo_header_hl = 'Title'
+    b._mark(button_prefix .. repo.full_name, repo_header_hl, function(mark)
+      local open = false
+      local user_info
+
+      mark.on_cr(function()
+        if open then
+          mark.text(button_prefix .. repo.full_name)
+          mark.hl(repo_header_hl)
+        else
+          mark.text(button_prefix .. repo.full_name .. ' ..')
+          mark.hl(repo_header_hl)
+
+          if user_info == nil then
+            gh.get_user(repo.creator.name, function(creator)
+              local person = concat_vals({
+                creator.name,
+                creator.html_url,
+                creator.blog,
+              }, ' | ')
+
+              local account = concat_kv({
+                ['󰀎'] = creator.followers,
+                [''] = creator.location,
+                [''] = creator.company,
+              }, ' ', '  ')
+
+              user_info = concat_vals({
+                repo.full_name,
+                person,
+                creator.bio,
+                account,
+              }, '\n')
+
+              mark.text(user_info)
+              mark.hl('Label')
+            end)
+          else
+            mark.text(user_info)
+            mark.hl('Label')
+          end
+        end
+
+        open = not open
+      end)
+    end)
+
+    b._mark(
+      table.concat({
+        link_prefix,
+        '☆ ' .. repo.stars,
+        repo.url,
+        repo.created,
+      }, ' | '),
+      'Comment',
+      function(mark)
+        mark.on_cr(function()
+          vim.ui.open(repo.url)
+        end)
+      end
+    )
+
+    b._text(description .. '\n')
+
+    if repo.has_discussions then
+      b._mark(link_prefix .. 'discussions', 'PmenuExtra', function(m)
+        m.on_cr(function()
+          vim.ui.open(repo.url .. '/discussions')
+        end)
+      end)
+    end
+
+    local button_hl = 'PmenuSel'
+    local readme_hl = 'CursorLine'
+
+    b._mark(button_prefix .. 'readme', button_hl, function(mark)
+      local showing = false
+      local readme
+
+      mark.on_cr(function()
+        mark.text('loading...')
+        if showing then
+          mark.text(button_prefix .. 'readme')
+          mark.hl(button_hl)
+          showing = false
+        elseif readme then
+          mark.text(readme)
+          mark.hl(readme_hl, true) -- TODO this doesn't seem to work?
+          showing = true
+        else
+          get_readme_stub(
+            repo.creator.name,
+            repo.name,
+            15,
+            vim.schedule_wrap(function(stub)
+              readme = '===readme===\n' .. stub .. '\n============\n'
+              mark.text(readme)
+              mark.hl(readme_hl, true)
+              showing = true
+            end)
+          )
+        end
+      end)
+    end)
+
+    b._text('\n')
+  end
+end
+
 ---@class ShowOpts
 ---@field topic string
 ---@field after_date string
@@ -50,7 +169,7 @@ end
 ---@field buffer? table
 
 ---@param opts ShowOpts
-local function show_repos(opts)
+local function query_and_show_repos(opts)
   --- ranges are inclusive on both ends so we move one of the days so our slices have different items
   local function one_day_back(date_)
     return date.format_date(date.span(date_, -date.timespans.day))
@@ -81,41 +200,51 @@ local function show_repos(opts)
 
     local response = wait(gh.query(query_params, resolve))
 
-    local repos = gh.extract_response_repos(response)
+    local repos = gh.extract_response_repos(response.body)
     if #repos == 0 then
       b.text(header .. '\n\nNo repos found')
-      return
+    else
+      b.text(string.format('%s\n\n', header)) -- clear 'checking..'
     end
-
-    b.text(string.format('%s\n%d result(s)\n', header, #repos)) -- clear 'checking..'
 
     if opts.page_timespan then
       vim.schedule(function()
-        b._mark('previous ' .. opts.page_timespan, 'PmenuSel', function(mark)
-          mark.on_cr(function()
-            b.text('') -- clear
-            show_repos(vim.tbl_deep_extend('force', opts, {
-              after_date = date.format_date(
-                date.span(after_date, -date.timespans[opts.page_timespan])
-              ),
-              before_date = after_date,
-              buffer = b,
-            }))
-          end)
-        end)
-        b._mark('next ' .. opts.page_timespan, 'PmenuSel', function(mark)
-          mark.on_cr(function()
-            b.text('') -- clear
-            show_repos(vim.tbl_deep_extend('force', opts, {
-              after_date = opts.before_date,
-              before_date = date.format_date(
-                date.span(opts.before_date, date.timespans[opts.page_timespan])
-              ),
-              buffer = b,
-            }))
-          end)
-        end)
-        b._text('\n\n')
+        b._mark(
+          button_prefix .. 'previous ' .. opts.page_timespan,
+          'PmenuSel',
+          function(mark)
+            mark.on_cr(function()
+              b.text('') -- clear
+              query_and_show_repos(vim.tbl_deep_extend('force', opts, {
+                after_date = date.format_date(
+                  date.span(after_date, -date.timespans[opts.page_timespan])
+                ),
+                before_date = after_date,
+                buffer = b,
+              }))
+            end)
+          end
+        )
+        b._mark(
+          button_prefix .. 'next ' .. opts.page_timespan,
+          'PmenuSel',
+          function(mark)
+            mark.on_cr(function()
+              b.text('') -- clear
+              query_and_show_repos(vim.tbl_deep_extend('force', opts, {
+                after_date = opts.before_date,
+                before_date = date.format_date(
+                  date.span(
+                    opts.before_date,
+                    date.timespans[opts.page_timespan]
+                  )
+                ),
+                buffer = b,
+              }))
+            end)
+          end
+        )
+        b._text('\n')
       end)
     end
 
@@ -124,128 +253,32 @@ local function show_repos(opts)
 
     -- TODO we can preload the first readme? Unauthed rate limits seem very very low though
     vim.schedule(function()
-      for _, repo in ipairs(repos) do
-        local description = ''
-        if repo.description then
-          description = '\n' .. repo.description
-        end
+      show_repos(b, repos)
 
-        local repo_header_hl = 'Title'
-        b._mark(repo.full_name, repo_header_hl, function(mark)
-          local open = false
-          local user_info
+      local more_response = response
 
-          mark.on_cr(function()
-            if open then
-              mark.text(repo.full_name)
-              mark.hl(repo_header_hl)
-            else
-              mark.text(repo.full_name .. ' ..')
-              mark.hl(repo_header_hl)
-
-              if user_info == nil then
-                gh.get_user(repo.creator.name, function(creator)
-                  local person = concat_vals({
-                    creator.name,
-                    creator.html_url,
-                    creator.blog,
-                  }, ' | ')
-
-                  local account = concat_kv({
-                    ['󰀎'] = creator.followers,
-                    [''] = creator.location,
-                    [''] = creator.company,
-                  }, ' ', '  ')
-
-                  user_info = concat_vals({
-                    repo.full_name,
-                    person,
-                    creator.bio,
-                    account,
-                  }, '\n')
-
-                  mark.text(user_info)
-                  mark.hl('Label')
-                end)
-              else
-                mark.text(user_info)
-                mark.hl('Label')
-              end
-            end
-
-            open = not open
-          end)
-        end)
-
-        b._mark(
-          table.concat({
-            '☆ ' .. repo.stars,
-            repo.url,
-            repo.created,
-          }, ' | '),
-          'Comment',
-          function(mark)
+      local draw_more
+      draw_more = function()
+        if more_response.links and more_response.links.next then
+          b._mark(button_prefix .. 'more', 'DiffAdd', function(mark)
             mark.on_cr(function()
-              pcall(
-                gh.get_issue_comments,
-                repo.creator.name,
-                repo.name,
-                1,
-                function(x)
-                  -- TODO -next
-                  -- what does this do?
-                  vim.notify(vim.inspect(x))
-                end
-              )
-            end)
-          end
-        )
+              async(function(wait_, resolve_)
+                more_response =
+                  wait_(gh.query_gh(more_response.links.next, resolve_))
 
-        b._text(description .. '\n')
+                vim.schedule(function()
+                  show_repos(b, gh.extract_response_repos(more_response.body))
+                  mark.text('')
 
-        if repo.has_discussions then
-          b._mark('discussions', 'PmenuExtra', function(m)
-            m.on_cr(function()
-              m.text(repo.url .. '/discussions')
+                  draw_more()
+                end)
+              end)
             end)
           end)
         end
-
-        local button_hl = 'PmenuSel'
-        local readme_hl = 'CursorLine'
-
-        b._mark('readme', button_hl, function(mark)
-          local showing = false
-          local readme
-
-          mark.on_cr(function()
-            mark.text('loading...')
-            if showing then
-              mark.text('readme')
-              mark.hl(button_hl)
-              showing = false
-            elseif readme then
-              mark.text(readme)
-              mark.hl(readme_hl, true) -- TODO this doesn't seem to work?
-              showing = true
-            else
-              get_readme_stub(
-                repo.creator.name,
-                repo.name,
-                15,
-                vim.schedule_wrap(function(stub)
-                  readme = '===readme===\n' .. stub .. '\n============\n'
-                  mark.text(readme)
-                  mark.hl(readme_hl, true)
-                  showing = true
-                end)
-              )
-            end
-          end)
-        end)
-
-        b._text('\n')
       end
+
+      draw_more()
     end)
   end)
 end
@@ -258,7 +291,7 @@ local function social(args)
   local date_type = args.fargs[3] or 'created'
 
   vim.schedule(function()
-    show_repos({
+    query_and_show_repos({
       topic = topic,
       after_date = date.parse(date_arg),
       date_type = date_type,
